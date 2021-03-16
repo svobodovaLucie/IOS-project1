@@ -1,0 +1,4 @@
+#!/bin/sh
+
+VAR1=$1
+echo $VAR1
