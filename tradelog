@@ -59,7 +59,11 @@ while [ "$#" -gt 0 ]; do
             shift; shift
             ;;
         -t)
-            TICKERS="$TICKERS $2"
+            if [ -z "$TICKERS" ]; then
+                TICKERS="$2"
+                else 
+                    TICKERS="$TICKERS|$2"
+            fi
             echo "Zadan prepinac t a $TICKERS"
             shift; shift
             ;;
@@ -103,13 +107,26 @@ READ_INPUT=$(echo "$READ_INPUT" | awk -F ';' -v date="$DATETIME_AFTER" '$1 > dat
 READ_INPUT=$(echo "$READ_INPUT" | awk -F ';' -v date="$DATETIME_BEFORE" '$1 < date {print $0}')
 
 # tickers
+if ! [ -z "$TICKERS" ]; then
+    echo "TICKERS v ifu: "$TICKERS
+#    READ_INPUT=$(echo "$READ_INPUT" | awk -F ';' '$2 == "GOOGL" {print $0}')
+     READ_INPUT=$(echo "$READ_INPUT" | grep -E "$TICKERS")
+fi
+
+#        #READ_INPUT=$(echo "$READ_INPUT" | awk -F ';' '{ if ($2==$TICKERS) {print $0}}')
+#        if [ "$2" -eq "$TICKERS" ]; then
+#
+
+
+
+
 
 # cyklus kdy bude postupne forem rozparsovavan TICKERS a if ! -z tak proved
-if ! [ -z "$TICKERS" ]; then
-    TICKER=$(echo "$TICKERS" | grep -f1)
-    READ_INPUT=$(echo "$READ_INPUT" | awk -F ';' -v ticker="$TICKER" '$2 == ticker {print $0}')
-    TICKERS=""
-fi
+#if ! [ -z "$TICKERS" ]; then
+#    TICKER=$(echo "$TICKERS" | grep -f1)
+#    READ_INPUT=$(echo "$READ_INPUT" | awk -F ';' -v ticker="$TICKER" '$2 == ticker {print $0}')
+#    TICKERS=""
+#fi
 
 # vse je vyfiltrovane
 
