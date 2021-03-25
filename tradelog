@@ -30,6 +30,7 @@ TICKERS=""
 WIDTH=""
 LOG_FILES=""
 
+TICKERS_CNTR=0
 
 # store arguments
 while [ "$#" -gt 0 ]; do
@@ -41,7 +42,7 @@ while [ "$#" -gt 0 ]; do
                 echo "Bylo zadano vice prikazu."
                 exit 1
             fi
-            echo "Zadan prikaz "$COMMAND
+            #echo "Zadan prikaz "$COMMAND
             shift 
             ;;
         --help | -h)
@@ -50,12 +51,12 @@ while [ "$#" -gt 0 ]; do
             ;;
         -a)
             DATETIME_AFTER="$2"
-            echo "Zadan prepinac a a $DATETIME_AFTER"
+            #echo "Zadan prepinac a a $DATETIME_AFTER"
             shift; shift
             ;;
         -b)
             DATETIME_BEFORE="$2"
-            echo "Zadan prepinac b a $DATETIME_BEFORE"
+            #echo "Zadan prepinac b a $DATETIME_BEFORE"
             shift; shift
             ;;
         -t)
@@ -64,7 +65,8 @@ while [ "$#" -gt 0 ]; do
                 else 
                     TICKERS="$TICKERS|$2"
             fi
-            echo "Zadan prepinac t a $TICKERS"
+            TICKERS_CNTR=$((TICKERS_CNTR+1))
+            #echo "Zadan prepinac t a $TICKERS"
             shift; shift
             ;;
         -w)
@@ -74,7 +76,7 @@ while [ "$#" -gt 0 ]; do
                 echo "Zadano vice prepinacu -w"
                 exit 1
             fi
-            echo "Zadan prepinac -w a $WIDTH"
+            #echo "Zadan prepinac -w a $WIDTH"
             shift; shift
             ;;
          *)
@@ -108,39 +110,79 @@ READ_INPUT=$(echo "$READ_INPUT" | awk -F ';' -v date="$DATETIME_BEFORE" '$1 < da
 
 # tickers
 if ! [ -z "$TICKERS" ]; then
-    echo "TICKERS v ifu: "$TICKERS
-#    READ_INPUT=$(echo "$READ_INPUT" | awk -F ';' '$2 == "GOOGL" {print $0}')
-     READ_INPUT=$(echo "$READ_INPUT" | grep -E "$TICKERS")
+    curr_cnt=0
+    filtered=""
+    while [ "$curr_cnt" != "$TICKERS_CNTR" ] ; do
+        curr_cnt=$(($curr_cnt + 1))
+        curr_ticker=$(echo "$TICKERS" | awk -F '|' -v curr_cnt=$curr_cnt '{print $curr_cnt}')
+        filtered=$(echo "$READ_INPUT" | awk -F ';' -v curr_tick=$curr_ticker '$2 == curr_tick {print $0}')
+        if [ -z "$OUTPUT" ]; then
+            OUTPUT="$filtered"
+        else
+            OUTPUT="$OUTPUT\n$filtered"
+        fi
+
+    done
+    READ_INPUT=$(echo "$OUTPUT" | sort)
 fi
 
-#        #READ_INPUT=$(echo "$READ_INPUT" | awk -F ';' '{ if ($2==$TICKERS) {print $0}}')
-#        if [ "$2" -eq "$TICKERS" ]; then
-#
 
+#echo "$READ_INPUT"
 
+#<< COMMENT
+# list-tick
+case "$COMMAND" in
+    list-tick)
+        #echo "COMMAND = list-tick"
+        OUTPUT=$(echo "$READ_INPUT" | awk -F ';' '{print $2}' | sort | uniq)
+        ;;
+    profit)     # suma hodnot sell - suma hodnot buy
+        #echo "COMMAND = profit"
+        OUTPUT=$(echo "$READ_INPUT" | awk -F ';' -v profit=$OUTPUT '{ if ($3 == "sell") { tmp_sum+=$4*$6 } else{tmp_sum-=$4*$6} } END {printf("%.2f", tmp_sum + profit)}') 
+        ;;
+    pos)        # výpis hodnot aktuálně držených pozic seřazených sestupně dle hodnoty
+                # DATUM A CAS;TICKER;TYP TRANSAKCE;JEDNOTKOVA CENA;MENA;OBJEM;ID
+                # pos = (součet OBJEMŮ buy - součet OBJEMŮ sell) * jednotková cena za poslední transakci
+        #echo "COMMAND = pos"
+        tic_num=0
+        while [ "$tic_num" != "$TICKERS_CNTR" ]
+        do
+            tic_num=$(($tic_num + 1))
+            #echo "Vypisuje se cislo "$tic_num
+            act_ticker=$(echo "$TICKERS" | awk -F '|' -v i=$tic_num '{print $i}')
+            #echo " a je to ticker "$act_ticker
+            
+            # pro jeden ticker provedeme
+            pocet_drzenych_jednotek=$(echo "$READ_INPUT" | awk -F ';' -v act_ticker=$act_ticker '{ if ($2 == act_ticker && $3 == "buy") {tmp_sum+=$6} if ($2 == act_ticker && $3 == "sell") {tmp_sum-=$6} } END {printf("%.2f", tmp_sum)}')
+            #echo "Pocet drz. jedn. pro ticker "$act_ticker" je "$pocet_drzenych_jednotek
+            
+            jednotkova_cena_z_posledni_transakce=$(echo "$READ_INPUT" | awk -F ';' -v act_ticker=$act_ticker -v tmp_last=0 '{ if ($2 == act_ticker){tmp_last=$4} } END{print tmp_last}')
+            #echo "jedn. c.: "$jednotkova_cena_z_posledni_transakce
+            
+            #OUTPUT=$(awk -v pdj=$pocet_drzenych_jednotek -v jczpt=$jednotkova_cena_z_posledni_transakce -v res=0 '{res=pdj * jczpt} END {print res}')
+            #OUTPUT=$(pocet_drzenych_jednotek * jednotkova_cena_z_posledni_transakce)
+        done
+        
+        ;;
+    last-price)
+        #echo "COMMAND = last-price"
+        OUTPUT=$(echo "$READ_INPUT" | sort -r -k2,2)
+       # | uniq)
+       # |  awk -F ';' '{print $2, $4}')
+        #OUTPUT=$(echo "$READ_INPUT" | awk -F ';' '{print $2}' | sort | uniq)
+        ;;
+    hist-ord)
+        #echo "COMMAND = hist-ord"
+        ;;
+    graph-pos)
+        #echo "COMMAND = graph-pos"
+        ;;
+    *)
+        OUTPUT="$READ_INPUT"
+        ;;
+esac
 
+#echo ""
+#echo "OUTPUT:"
+echo "$OUTPUT"
 
-
-# cyklus kdy bude postupne forem rozparsovavan TICKERS a if ! -z tak proved
-#if ! [ -z "$TICKERS" ]; then
-#    TICKER=$(echo "$TICKERS" | grep -f1)
-#    READ_INPUT=$(echo "$READ_INPUT" | awk -F ';' -v ticker="$TICKER" '$2 == ticker {print $0}')
-#    TICKERS=""
-#fi
-
-# vse je vyfiltrovane
-
-
-## provedeni prikazu
-
-# prikazy provedeny
-
-
-## vypis vystupu
-
-# konec programu
-
-
-
-
-echo "$READ_INPUT"
