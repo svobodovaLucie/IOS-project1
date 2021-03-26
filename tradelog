@@ -42,7 +42,6 @@ while [ "$#" -gt 0 ]; do
                 echo "Bylo zadano vice prikazu."
                 exit 1
             fi
-            #echo "Zadan prikaz "$COMMAND
             shift 
             ;;
         --help | -h)
@@ -51,12 +50,10 @@ while [ "$#" -gt 0 ]; do
             ;;
         -a)
             DATETIME_AFTER="$2"
-            #echo "Zadan prepinac a a $DATETIME_AFTER"
             shift; shift
             ;;
         -b)
             DATETIME_BEFORE="$2"
-            #echo "Zadan prepinac b a $DATETIME_BEFORE"
             shift; shift
             ;;
         -t)
@@ -66,7 +63,6 @@ while [ "$#" -gt 0 ]; do
                     TICKERS="$TICKERS|$2"
             fi
             TICKERS_CNTR=$((TICKERS_CNTR+1))
-            #echo "Zadan prepinac t a $TICKERS"
             shift; shift
             ;;
         -w)
@@ -76,7 +72,6 @@ while [ "$#" -gt 0 ]; do
                 echo "Zadano vice prepinacu -w"
                 exit 1
             fi
-            #echo "Zadan prepinac -w a $WIDTH"
             shift; shift
             ;;
          *)
@@ -91,7 +86,6 @@ while [ "$#" -gt 0 ]; do
 done
 
 ## nacteni vstupu do promenne READ_INPUT
-#
 if ! [ -z "$GZ_LOG_FILES" ] && [ -z "$LOG_FILES" ]; then
     READ_INPUT=$(gzip -d -c $GZ_LOG_FILES)
 elif ! [ -z "$GZ_LOG_FILES" ]; then
@@ -99,24 +93,13 @@ elif ! [ -z "$GZ_LOG_FILES" ]; then
 else
     READ_INPUT=$(cat $LOG_FILES)
 fi
-# argumenty jsou ulozeny v jednotlivych promennych
-
-
-## filtry
-# podle human
-#READ_INPUT="cat $READ_INPUT | awk -F ';' '\\$1 > $DATETIME_AFTER && \\$1 < $DATETIME_BEFORE && \\$2 ~ /^($TICKERS)$ {print \\$0 }'"
-
 
 # datetime
 READ_INPUT=$(echo "$READ_INPUT" | awk -F ';' -v date="$DATETIME_AFTER" '$1 > date {print $0}')
 READ_INPUT=$(echo "$READ_INPUT" | awk -F ';' -v date="$DATETIME_BEFORE" '$1 < date {print $0}')
 
 # tickers
-
-#<<COMMENT2
 if ! [ -z "$TICKERS" ]; then
-
-#<<COMMENT
     curr_cnt=0
     filtered=""
     while [ "$curr_cnt" != "$TICKERS_CNTR" ] ; do
@@ -128,21 +111,10 @@ if ! [ -z "$TICKERS" ]; then
         else
             OUTPUT="$OUTPUT\n$filtered"
         fi
-        #filter_sum=`echo "$filter_sum" & echo "$filtered"`
     done
     READ_INPUT=$(echo "$OUTPUT" | sort)
-    #READ_INPUT=`echo "$filter_sum"`
-    #READ_INPUT=`echo "$READ_INPUT" | sort`
-#COMMENT
-# using grep
-#READ_INPUT=$(echo "$READ_INPUT" | grep -E "$TICKERS")
 fi
-#COMMENT2
 
-#echo "$READ_INPUT"
-
-#<< COMMENT
-# list-tick
 case "$COMMAND" in
     list-tick)
         OUTPUT=$(echo "$READ_INPUT" | awk -F ';' '{print $2}' | sort | uniq)
@@ -169,7 +141,6 @@ case "$COMMAND" in
             tic_num=$(($tic_num + 1))
             act_ticker=$(echo "$TICKERS" | awk -F '|' -v i=$tic_num '{print $i}')
             
-            # pro jeden ticker provedeme
             pocet_drzenych_jednotek=$(echo "$READ_INPUT" | awk -F ';' -v act_ticker=$act_ticker '{ if ($2 == act_ticker && $3 == "buy") {tmp_sum+=$6} if ($2 == act_ticker && $3 == "sell") {tmp_sum-=$6} } END {printf("%.2f", tmp_sum)}')
             jednotkova_cena_z_posledni_transakce=$(echo "$READ_INPUT" | awk -F ';' -v act_ticker=$act_ticker -v tmp_last=0 '{ if ($2 == act_ticker){tmp_last=$4} } END{print tmp_last}')
             
@@ -177,7 +148,6 @@ case "$COMMAND" in
             result_pro_act_ticker=$(echo "$filter_pos" | awk -v pdj=$pocet_drzenych_jednotek -v jczpt=$jednotkova_cena_z_posledni_transakce -v res=0 '{res = pdj * jczpt} END {printf("%05.2f", res)}')
             
             len_of_result_pro_act_ticker=${#result_pro_act_ticker}
-            #echo "len pro ticker "$act_ticker" je "$len_of_result_pro_act_ticker" a jeho hodnota je "$result_pro_act_ticker
             
             # nalezeni nejdelsiho retezce
             if [ "$len_of_result_pro_act_ticker" -gt "$max_len" ]; then
@@ -191,12 +161,10 @@ case "$COMMAND" in
                 tmp_output="$tmp_output\n$vypis"
             fi
         done
-        #echo "MAX LEN JE: "$max_len
         tmp2_output=$(echo "$tmp_output" | awk -F ';' -v max_len=$max_len '{printf("%-9s :%*.2f\n", $1, max_len+1, $2)}')
         OUTPUT=$(echo "$tmp2_output" |  sort -t ':' -h -r  -k 2)
         ;;
     last-price)
-        
         # get all tickers if any -t entered
         if [ -z "$TICKERS" ]; then
             all_tickers_oddelene_n=$(echo "$READ_INPUT" | awk -F ';' '{print $2}' | sort | uniq)
@@ -231,19 +199,53 @@ case "$COMMAND" in
         OUTPUT=$(echo "$tmp2_output" |  sort -t ':' -k1)
         ;;
     hist-ord)
-        #echo "COMMAND = hist-ord"
-        
+        # get all tickers if any -t entered
+        if [ -z "$TICKERS" ]; then
+            all_tickers_oddelene_n=$(echo "$READ_INPUT" | awk -F ';' '{print $2}' | sort | uniq)
+            TICKERS=$(echo "$all_tickers_oddelene_n" | awk 'BEGIN{ORS="|"} {print $0}')
+            TICKERS_CNTR=$(echo "$all_tickers_oddelene_n" | awk 'END{print NR}')
+        fi
 
+        tic_num=0
+        tmp_output=""
+        max_len=0
+        transakce_cntr=0
+        while [ "$tic_num" != "$TICKERS_CNTR" ]
+        do
+            transakce_cntr=0
+            tic_num=$(($tic_num + 1))
+            act_ticker=$(echo "$TICKERS" | awk -F '|' -v i=$tic_num '{print $i}')
+            transakce_cntr=$(echo "$READ_INPUT" | awk -F ';' -v tr_cnt=0 -v act_ticker=$act_ticker '{ if ($2 == act_ticker){i+=1} }END {print i}')
+
+            vystup_pro_act_tic=$(awk -v i=$transakce_cntr 'BEGIN { OFS="#"; $i="#"; print }')
+            len_of_result_pro_act_ticker=${#vystup_pro_act_tic}
+
+            # nalezeni nejdelsiho retezce
+            if [ "$len_of_result_pro_act_ticker" -gt "$max_len" ]; then
+                max_len="$len_of_result_pro_act_ticker"
+            fi
+            
+            if [ -z "$vystup_pro_act_tic" ]; then
+                vypis="$act_ticker;$vystup_pro_act_tic"
+            else
+                vypis="$act_ticker; $vystup_pro_act_tic"
+            fi   
+
+            if [ -z "$tmp_output" ]; then
+                tmp_output="$vypis"
+            else
+                tmp_output="$tmp_output\n$vypis"
+            fi
+        done
+        tmp2_output=$(echo "$tmp_output" | awk -F ';' -v max_len=$max_len '{printf("%-9s :%-s\n", $1, $2)}')
+        OUTPUT=$(echo "$tmp2_output" |  sort -t ':' -k1)
         ;;
     graph-pos)
-        #echo "COMMAND = graph-pos"
         ;;
     *)
         OUTPUT="$READ_INPUT"
         ;;
 esac
 
-#echo ""
-#echo "OUTPUT:"
 echo "$OUTPUT"
 
