@@ -61,6 +61,28 @@ save_output_unformatted()
     fi
 }
 
+# Function saves profit into idk where
+get_profit()
+{
+    # get all tickers if any ticker entered
+    get_tickers
+        
+    tic_num=0
+    profit=0
+    output_unformatted=""
+    while [ "$tic_num" != "$TICKERS_COUNTER" ]
+    do
+        # loads currently proccesed ticker into curr_ticker
+        tic_num=$(($tic_num + 1))
+        curr_ticker=$(echo "$TICKERS" | awk -F '|' -v i=$tic_num '{print $i}')
+            
+        curr_ticker_output=$(echo "$READ_INPUT" | awk -F ';' -v tic=$curr_ticker '{ if ($2==tic && $3=="sell") \
+                     {sum+=$4*$6} if ($2==tic && $3=="buy") {sum-=$4*$6} } END {printf("%.2f", sum)}')
+        save_output_unformatted
+    done
+
+}
+
 # Function saves list of values ​​of currently held positions into output_unformatted variable
 # in format : (ticker1_name;pos_of_ticker1'\n'ticker1_name;pos_of_ticker1'\n'...)
 # Length of longest variable string is saved into max_len
@@ -255,8 +277,8 @@ case "$COMMAND" in
         ;;
     profit)
         # output: statement of total profit from closed positions
-        OUTPUT=`echo "$READ_INPUT" | awk -F ';' -v profit=$OUTPUT '{ if ($3 == "sell") { tmp_sum+=$4*$6 } \
-                else{tmp_sum-=$4*$6} } END {printf("%.2f", tmp_sum + profit)}'` 
+        get_profit
+        OUTPUT=$(echo "$output_unformatted" | awk -v profit=0 '{profit+=$1} END {printf("%.2f", profit)}')
         ;;
     pos)
         # output: list of values ​​of currently held positions sorted in descending order by value
@@ -264,7 +286,6 @@ case "$COMMAND" in
         OUTPUT=$(echo "$output_unformatted" | awk -F ';' -v len=$max_len '{printf("%-9s :%*.2f\n", $1, len+1, $2)}'\
                 | sort -t ':' -h -r  -k 2)
         ;;
-
     last-price)
         # output: list of the last known price for each ticker
         get_last_price
