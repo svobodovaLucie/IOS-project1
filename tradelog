@@ -286,45 +286,17 @@ case "$COMMAND" in
         # get numerical values of held positions for each ticker
         get_all_tickers_pos
 
-        if [ -z "$WIDTH" ]; then
-            WIDTH=1000
+        if [ -z "$WIDTH" ]; then    # one character = 1000
+            output_unformatted=$(echo "$output_unformatted" | awk -F ';' '{ if ($2 > 0){$2=($2/1000)-(0.49)} \
+                                else {$2=($2/1000)+(0.49)} }{ printf("%s;%.0f\n", $1, $2) } ')
+        else
+            max=$(echo "$output_unformatted" | awk -F ';' 'function abs(n){return n<0 ? -n : n}; \
+                BEGIN{max=0} {if(abs($2) > max) max=abs($2)} END{print max}')
+            output_unformatted=$(echo "$output_unformatted" | awk -F ';' -v m=$max -v w=$WIDTH 'BEGIN{one=m/w} \
+                { if ($2 > 0){$2=($2/one)-(0.49)} else {$2=($2/one)+(0.49)} }{printf("%s;%.0f\n", $1, $2)} ')
         fi
-
-        # hodnota jednoho dilku je:
-        jeden_dilek=$(echo "$output_unformatted" | awk -F ';' -v max=0 -v w=$WIDTH 'function abs(n){return n<0 ? -n : n}\
-                    { if (abs($2) > max) {max = abs($2)} } END{printf("%05.22f", (max/w))}')
-            
-        #vypocitat, kolik dilku ma byt (hodnota_pro_ticker / jeden_dilek), 
-        # pokud zaporna, tak zaokrouhlit nahoru + dat vykricniky
-        # pokud kladna, tak zaokrouhlid dolu + dat hashtags
-        tmp2_output=$(echo "$output_unformatted" | awk -F ';' -v res=0 -v dilek=$jeden_dilek '{
-            {res=$2/dilek; 
-            if (res < 0) {
-                res=res+0.5;
-            }; 
-            if (res > 0) {
-                res=res-0.5;
-            }}; 
-            {printf("%-9s:%.0f\n", $1, res)} 
-            }')
-        # v tmp2_output nyni ulozena cela cisla se znamenkem
-        # uz staci je jen prevest na pocet znaku (spravnych znaku)
-        tmp3_output=$(echo "$tmp2_output" | awk -F ':' '{ 
-            tmp_res=$2;
-            $2="";
-            if (tmp_res > 0) {
-                for(i=0; i<tmp_res; i++)
-                    {$2=$2"#"};
-                $2=" "$2;
-            };
-            if (tmp_res < 0) {
-                for(i=tmp_res; i<0; i++)
-                    {$2=$2"!"};
-                $2=" "$2;
-            }
-            {printf("%-9s :%-s\n", $1, $2)}}')
-        
-        OUTPUT=$(echo "$tmp3_output" |  sort -t ':' -k1)
+        OUTPUT=$(echo "$output_unformatted" | awk -F ';' '{num=$2; $2=""; if (num > 0) {for(i=0; i<num; i++){$2=$2"#"}}; \
+                if (num < 0) {for(i=num; i<0; i++){$2=$2"!"}}; if (num != 0) $2=" "$2;} {printf("%-9s :%-s\n", $1, $2)}')
         ;;
     *)
         OUTPUT="$READ_INPUT"
