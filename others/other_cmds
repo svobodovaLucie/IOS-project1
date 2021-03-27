@@ -1,0 +1,38 @@
+#!/bin/sh
+
+SOUBOR=$1
+#SHODA=$2
+
+# GREP 
+echo ' GREP CMDS -------------------------'
+
+# Vypise doslova: grep -c "cas" file (zadne rozvinuti)
+echo 'grep -c "cas" $SOUBOR'
+
+# Provede grep
+echo $(grep -c "cas" $SOUBOR)
+echo "Pocet shod se stringem $SHODA: " $(grep -c "$SHODA" $SOUBOR)
+echo "Pocet shod se stringem $SHODA: " $(grep -c $SHODA $SOUBOR)
+
+# Take provede grep a vypise pouze vysledek
+echo 'grep "$SHODA" $SOUBOR'
+grep "$SHODA" $SOUBOR
+
+# vypise prvni nalezene
+echo 'grep "$SHODA" $SOUBOR | head -1'
+grep "$SHODA" $SOUBOR | head -1
+
+# vypise dva prvni nalezy
+echo 'grep "$SHODA" $SOUBOR | head -2'
+grep "$SHODA" $SOUBOR | head -2
+
+# vypise druhy nalezeny (prvni dva - z nich ten prvni od konce)
+echo 'grep "$SHODA" $SOUBOR | head -2 | tail -1'
+grep "$SHODA" $SOUBOR | head -2 | tail -1
+
+# CUT
+# rozdeli vstup podle -d oddelovace
+echo '\nCUT CMDS --------------------------'
+
+# najde v souboru text shoda, dany soubor rozdeli podle oddelovacu a vypise 3. radek z vybraneho radku (-f3)
+grep "$SHODA" $SOUBOR | cut -d';' -f3 | tail -1

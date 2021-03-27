@@ -1,0 +1,169 @@
+#!/bin/sh
+
+export POSIXLY_CORRECT=yes
+export LC_NUMERIC=en_US.UTF-8
+
+print_help() {
+    echo "Použití: tradelog [-h|--help] [FILTR] [PŘÍKAZ] [LOG [LOG2 [...]]                                      "
+    echo "PŘÍKAZ může být jeden z následujících:                                                                "
+    echo "      list-tick – výpis seznamu vyskytujících se burzovních symbolů, tzv. “tickerů”.                  "
+    echo "      profit – výpis celkového zisku z uzavřených pozic.                                              "
+    echo "      pos – výpis hodnot aktuálně držených pozic seřazených sestupně dle hodnoty.                     "
+    echo "      last-price – výpis poslední známé ceny pro každý ticker.                                        "
+    echo "      hist-ord – výpis histogramu počtu transakcí dle tickeru.                                        "
+    echo "      graph-pos – výpis grafu hodnot držených pozic dle tickeru.                                      "
+    echo "FILTR může být kombinace následujících:                                                               "
+    echo "      -a DATETIME – after: jsou uvažovány pouze záznamy PO tomto datu (bez tohoto data).              "
+    echo "                    DATETIME je formátu YYYY-MM-DD HH:MM:SS.                                          "
+    echo "      -b DATETIME – before: jsou uvažovány pouze záznamy PŘED tímto datem (bez tohoto data).          "
+    echo "      -t TICKER – jsou uvažovány pouze záznamy odpovídající danému tickeru. Při více výskytech        "
+    echo "                  přepínače se bere množina všech uvedených tickerů.                                  "
+    echo "      -w WIDTH – u výpisu grafů nastavuje jejich šířku, tedy délku nejdelšího řádku na WIDTH.         "
+    echo "                 Tedy, WIDTH musí být kladné celé číslo. Více výskytů přepínače je chybné spuštění.   "
+    echo "      -h a --help vypíšou nápovědu s krátkým popisem každého příkazu a přepínače.                     "
+}
+
+COMMAND=""
+LOG_FILES=""
+GZ_LOG_FILES=""
+DATETIME_BEFORE="0000-00-00 00:00:00"
+DATETIME_AFTER="9999-99-99 99:99:99"
+TICKERS=""
+READ_INPUT="cat"
+
+
+while [ "$#" -gt 0 ]; do
+    case "$1" in
+        list-tick | profit | pos | last-price | hist-ord | graph-pos)
+            COMMAND="$1" :'if command not equal "" -> spatny format' 
+            echo "Zadan prikaz "$COMMAND
+            shift 
+            ;;
+        --help | -h)
+            print_help
+            exit 0
+            ;;
+        -a)
+            echo "Zadan prepinac a"
+            ;;
+        -b)
+            echo "Zadan prepinac b"
+            ;;
+        -t)
+            TICKERS="$1"
+            echo "Zadan prepinac t"
+            ;;
+        -w)
+            echo "Zadan prepinac w"
+            ;;
+         *)
+            if [ `echo $1 | grep "\.gz"` ]; then #'pokud soubor konci .gz, nacteme jej do GZ_LOG_FILES'
+                echo "Byl zadan gzip"
+                READ_INPUT="gzip -d -c $GZ_LOG_FILES | $READ_INPUT - "
+            else 
+                echo "Nebyl zadan gzip, ale neco jineho"
+                READ_INPUT="$READ_INPUT $LOG_FILES"
+            fi
+            shift
+            ;;
+    esac
+done
+
+echo $READ_INPUT
+
+<<COMME
+OUTPUT=$(awk -F ';' '$2=="FB"')
+echo $OUTPUT
+exit 1
+COMME
+
+
+<<COM
+grep "^"$TICKER" $LOG_FILES | cut -d';' -f3 | tail -1"
+TICKER_FILTER="grep '^.*\($TICKERS\)'"
+COM
+
+<<COMMENT
+grep "$TICKER" $LOG_FILES | cut -d';' -f3 | tail -1
+' ZPRACOVANI PRIKAZU - btw az nakonec po filtrech'
+'case "$COMMAND" in
+    list-tick)
+
+    profit)
+
+        ;;
+    pos)
+
+        ;;
+    last-price)
+
+        ;;
+    hist-ord)
+
+        ;;
+    grapf-pos)
+
+        ;;
+esac
+'
+
+
+
+
+'
+        -w)
+            WIDTH="$2"  ''zpracovali jsme 2 parametry najednou''
+            shift
+            shift 
+            ;;'
+'        tickery oddelovat pajpou, vysledkem je bud to nalevo nebo to napravo
+        $TICKERS=$1|$TICKERS''
+        *) if [ ]; then ''pokud soubor konci .gz, nacteme jej do GZ_LOG_FILES''
+                GZ_LOG_FILES="$1 $GZ_LOG_FILES"
+           else 
+                LOG_FILES="$1 $LOG_FILES"
+           fi
+    esac
+done
+
+'
+'pokud jsou gzip soubory:'
+'READ_INPUT="gzip -d -c "GZIP" | cat $LOG_FILES - | sort"'
+'pokud nejsou gzip soubory'
+'READ_INPUT="cat $LOG_FILES | sort"'
+'ze zadani jsou soubory vzdy predavany v chronologickem poradi - podle casu - nemusi byt sort'
+'READ_INPUT="cat $LOG_FILES"'
+'pokud nejsou zadne predane soubory'
+'READ_INPUT="cat"'
+
+'promenna pro ticker filtry'
+'pokud zadne filtry nebyly zadane, dat tam jenom cat'
+'TICKER_FILTER="cat"'
+'jinak: na zacatku radsku libovolne znaky, pok strednik, pak NEKTERY Z TECH TICKERU'
+'TICKER_FILTER="grep ''^.*\($TICKERS\)''"'
+
+
+'ujistit se, ze print $0 vypise cely radek'
+'timto si vyfiltrujeme jenom logy, ktere splnuji podminku'
+'READ_FILTERED="eval $READ_INPUT | awk -F '';'' ''if (\$1 > $AFTER_TIME &&) {print \$0} } evatl $TICKER_FILTER''"'
+
+
+'ted uz samotne prikazy'
+'if []
+    eval "$READ_FILTERED | zpracuj, nejspis pores awk"
+'
+'vedet:
+jak funguje export, funkce, smycky, switch, podminky, promenne
+gzip, cat, grep, sort (napr -n, -u, -k, -t, takze napr sort -t '';'' -k 2,2 - timto seradime sloupce podle ticker, -s sprt podle vice klicu - napr datu7m a pak ticker - prikaz sort | sort -s -t ';' -k 2,2)
+uniq
+
+awk
+vypis cisel ve formatu, v jakem potrebujeme:
+awk ''{printf %12.2f, s}'
+'vypis tickeru
+awk ''{printf %-10s, s}'
+'begin a end bloky = begin se vykona pred jakymkoéliv radkem, end az na konci bloku
+awk ''BEGIN{} {printf....}'
+'ipos imlementvat tak, ze si to vydsortujeme podle tisckeru aby stejne byly vsydcky vedle sebe a pak prochazet radky, mit ulozene, jaky jsme ticker zpracovavali na prdchozim radku, pokud ten ticker je stejny a uz jsme ho zpracovavali, tak zvysit pocet a pokud je ticker uz jinej ta vime ze jsme prosli vsechny radky s danym tickerem muzeme je vypsat a jit delat dalsi (neni potreba si vytvaret pole ani)'
+
+COMMENT

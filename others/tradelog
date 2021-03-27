@@ -1,0 +1,188 @@
+#!/bin/sh
+
+export POSIXLY_CORRECT=yes
+export LC_NUMERIC=en_US.UTF-8
+
+print_help() {
+    echo "Použití: tradelog [-h|--help] [FILTR] [PŘÍKAZ] [LOG [LOG2 [...]]                                      "
+    echo "PŘÍKAZ může být jeden z následujících:                                                                "
+    echo "      list-tick – výpis seznamu vyskytujících se burzovních symbolů, tzv. “tickerů”.                  "
+    echo "      profit – výpis celkového zisku z uzavřených pozic.                                              "
+    echo "      pos – výpis hodnot aktuálně držených pozic seřazených sestupně dle hodnoty.                     "
+    echo "      last-price – výpis poslední známé ceny pro každý ticker.                                        "
+    echo "      hist-ord – výpis histogramu počtu transakcí dle tickeru.                                        "
+    echo "      graph-pos – výpis grafu hodnot držených pozic dle tickeru.                                      "
+    echo "FILTR může být kombinace následujících:                                                               "
+    echo "      -a DATETIME – after: jsou uvažovány pouze záznamy PO tomto datu (bez tohoto data).              "
+    echo "                    DATETIME je formátu YYYY-MM-DD HH:MM:SS.                                          "
+    echo "      -b DATETIME – before: jsou uvažovány pouze záznamy PŘED tímto datem (bez tohoto data).          "
+    echo "      -t TICKER – jsou uvažovány pouze záznamy odpovídající danému tickeru. Při více výskytech        "
+    echo "                  přepínače se bere množina všech uvedených tickerů.                                  "
+    echo "      -w WIDTH – u výpisu grafů nastavuje jejich šířku, tedy délku nejdelšího řádku na WIDTH.         "
+    echo "                 Tedy, WIDTH musí být kladné celé číslo. Více výskytů přepínače je chybné spuštění.   "
+    echo "      -h a --help vypíšou nápovědu s krátkým popisem každého příkazu a přepínače.                     "
+}
+
+COMMAND=""
+DATETIME_AFTER="0000-00-00 00:00:00"
+DATETIME_BEFORE="9999-99-99 99:99:99"
+TICKERS=""
+WIDTH=""
+LOG_FILES=""
+
+TICKERS_CNTR=0
+
+# store arguments
+while [ "$#" -gt 0 ]; do
+    case "$1" in
+        list-tick | profit | pos | last-price | hist-ord | graph-pos)
+            if [ -z $COMMAND ]; then
+                COMMAND="$1"
+            else
+                echo "Bylo zadano vice prikazu."
+                exit 1
+            fi
+            echo "Zadan prikaz "$COMMAND
+            shift 
+            ;;
+        --help | -h)
+            print_help
+            exit 0
+            ;;
+        -a)
+            DATETIME_AFTER="$2"
+            echo "Zadan prepinac a a $DATETIME_AFTER"
+            shift; shift
+            ;;
+        -b)
+            DATETIME_BEFORE="$2"
+            echo "Zadan prepinac b a $DATETIME_BEFORE"
+            shift; shift
+            ;;
+        -t)
+            if [ -z "$TICKERS" ]; then
+                TICKERS="$2"
+                else 
+                    TICKERS="$TICKERS|$2"
+            fi
+            TICKERS_CNTR=$((TICKERS_CNTR+1))
+            echo "Zadan prepinac t a $TICKERS"
+            shift; shift
+            ;;
+        -w)
+            if [ -z "$WIDTH" ]; then
+                WIDTH="$2"
+            else
+                echo "Zadano vice prepinacu -w"
+                exit 1
+            fi
+            echo "Zadan prepinac -w a $WIDTH"
+            shift; shift
+            ;;
+         *)
+            if [ `echo $1 | grep "\.gz"` ]; then #'pokud soubor konci .gz, nacteme jej do GZ_LOG_FILES'
+                GZ_LOG_FILES="$GZ_LOG_FILES $1"
+            else 
+                LOG_FILES="$LOG_FILES $1"
+            fi
+            shift
+            ;;
+    esac
+done
+
+## nacteni vstupu do promenne READ_INPUT
+#
+if ! [ -z "$GZ_LOG_FILES" ] && [ -z "$LOG_FILES" ]; then
+    READ_INPUT=$(gzip -d -c $GZ_LOG_FILES)
+elif ! [ -z "$GZ_LOG_FILES" ]; then
+    READ_INPUT=$(gzip -d -c $GZ_LOG_FILES && cat $LOG_FILES)
+else
+    READ_INPUT=$(cat $LOG_FILES)
+fi
+# argumenty jsou ulozeny v jednotlivych promennych
+
+
+## filtry
+
+# datetime
+READ_INPUT=$(echo "$READ_INPUT" | awk -F ';' -v date="$DATETIME_AFTER" '$1 > date {print $0}')
+READ_INPUT=$(echo "$READ_INPUT" | awk -F ';' -v date="$DATETIME_BEFORE" '$1 < date {print $0}')
+
+# tickers
+if ! [ -z "$TICKERS" ]; then
+    curr_cnt=0
+    filtered=""
+    while [ "$curr_cnt" != "$TICKERS_CNTR" ] ; do
+        curr_cnt=$(($curr_cnt + 1))
+        curr_ticker=$(echo "$TICKERS" | awk -F '|' -v curr_cnt=$curr_cnt '{print $curr_cnt}')
+        filtered=$(echo "$READ_INPUT" | awk -F ';' -v curr_tick=$curr_ticker '$2 == curr_tick {print $0}')
+        if [ -z "$OUTPUT" ]; then
+            OUTPUT="$filtered"
+        else
+            OUTPUT="$OUTPUT\n$filtered"
+        fi
+
+    done
+    READ_INPUT=$(echo "$OUTPUT" | sort)
+fi
+
+
+#echo "$READ_INPUT"
+
+#<< COMMENT
+# list-tick
+case "$COMMAND" in
+    list-tick)
+        echo "COMMAND = list-tick"
+        OUTPUT=$(echo "$READ_INPUT" | awk -F ';' '{print $2}' | sort | uniq)
+        ;;
+    profit)     # suma hodnot sell - suma hodnot buy
+        echo "COMMAND = profit"
+        OUTPUT=$(echo "$READ_INPUT" | awk -F ';' -v profit=$OUTPUT '{ if ($3 == "sell") { tmp_sum+=$4*$6 } else{tmp_sum-=$4*$6} } END {printf("%.2f", tmp_sum + profit)}') 
+        ;;
+    pos)        # výpis hodnot aktuálně držených pozic seřazených sestupně dle hodnoty
+                # DATUM A CAS;TICKER;TYP TRANSAKCE;JEDNOTKOVA CENA;MENA;OBJEM;ID
+                # pos = (součet OBJEMŮ buy - součet OBJEMŮ sell) * jednotková cena za poslední transakci
+        echo "COMMAND = pos"
+        tic_num=0
+        while [ "$tic_num" != "$TICKERS_CNTR" ]
+        do
+            tic_num=$(($tic_num + 1))
+            echo "Vypisuje se cislo "$tic_num
+            act_ticker=$(echo "$TICKERS" | awk -F '|' -v i=$tic_num '{print $i}')
+            echo " a je to ticker "$act_ticker
+            
+            # pro jeden ticker provedeme
+            pocet_drzenych_jednotek=$(echo "$READ_INPUT" | awk -F ';' -v act_ticker=$act_ticker '{ if ($2 == act_ticker && $3 == "buy") {tmp_sum+=$6} if ($2 == act_ticker && $3 == "sell") {tmp_sum-=$6} } END {printf("%.2f", tmp_sum)}')
+            echo "Pocet drz. jedn. pro ticker "$act_ticker" je "$pocet_drzenych_jednotek
+            
+            jednotkova_cena_z_posledni_transakce=$(echo "$READ_INPUT" | awk -F ';' -v act_ticker=$act_ticker -v tmp_last=0 '{ if ($2 == act_ticker){tmp_last=$4} } END{print tmp_last}')
+            echo "jedn. c.: "$jednotkova_cena_z_posledni_transakce
+            
+            #OUTPUT=$(awk -v pdj=$pocet_drzenych_jednotek -v jczpt=$jednotkova_cena_z_posledni_transakce -v res=0 '{res=pdj * jczpt} END {print res}')
+            #OUTPUT=$(pocet_drzenych_jednotek * jednotkova_cena_z_posledni_transakce)
+        done
+        
+        ;;
+    last-price)
+        echo "COMMAND = last-price"
+        OUTPUT=$(echo "$READ_INPUT" | sort -r -k2,2)
+       # | uniq)
+       # |  awk -F ';' '{print $2, $4}')
+        #OUTPUT=$(echo "$READ_INPUT" | awk -F ';' '{print $2}' | sort | uniq)
+        ;;
+    hist-ord)
+        echo "COMMAND = hist-ord"
+        ;;
+    graph-pos)
+        echo "COMMAND = graph-pos"
+        ;;
+    *)
+        OUTPUT="$READ_INPUT"
+        ;;
+esac
+
+#echo ""
+#echo "OUTPUT:"
+echo "$OUTPUT"
+
