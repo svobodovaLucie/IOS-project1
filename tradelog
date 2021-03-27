@@ -1,5 +1,15 @@
 #!/bin/sh
 
+##############################
+#
+#   FIT VUT
+#   Řešení IOS - Projekt 1
+#   Autor: Lucie Svobodová
+#          xsvobo1x
+#   Datum: 27. 3. 2021
+#
+##############################
+
 export POSIXLY_CORRECT=yes
 export LC_NUMERIC=en_US.UTF-8
 
@@ -23,16 +33,17 @@ print_help() {
     echo "      -h a --help vypíšou nápovědu s krátkým popisem každého příkazu a přepínače.                     "
 }
 
+TICKERS=""
 COMMAND=""
 DATETIME_AFTER="0000-00-00 00:00:00"
 DATETIME_BEFORE="9999-99-99 99:99:99"
-TICKERS=""
 WIDTH=""
 LOG_FILES=""
+GZ_LOG_FILES=""
 TICKERS_COUNTER=0
 output_unformatted=""
 
-# Function saves an array of tickers into variable TICKERS (ticker1;ticker2...)
+# Function saves tickers into variable TICKERS (ticker1;ticker2...)
 # and a number of tickers into TICKERS_COUNTER
 get_tickers()
 {
@@ -43,7 +54,7 @@ get_tickers()
     fi
 }
 
-# Function saves max length of res_for_curr_ticker
+# Function finds the higher number of len_of_res and max_len and saves it into max_len
 find_max_len()
 {
     if [ "$len_of_res" -gt "$max_len" ]; then
@@ -51,7 +62,7 @@ find_max_len()
     fi
 }
 
-# Function saves info about surrently processed ticker into variable that stores info about all tickers
+# Function saves info about currently processed ticker into variable that stores info about all tickers
 save_output_unformatted()
 {
     if [ -z "$output_unformatted" ]; then
@@ -61,10 +72,11 @@ save_output_unformatted()
     fi
 }
 
-# Function saves profit into idk where
+# Function saves profit for each ticker into variable output_unformatted
+# in format : (ticker1_name;profit1'\n'ticker2_name;profit2'\n'...)
 get_profit()
 {
-    # get all tickers if any ticker entered
+    # get all tickers if any ticker filter entered
     get_tickers
         
     tic_num=0
@@ -73,7 +85,7 @@ get_profit()
         # loads currently proccesed ticker into curr_ticker
         tic_num=$(($tic_num + 1))
         curr_ticker=$(echo "$TICKERS" | awk -F '|' -v i=$tic_num '{print $i}')
-            
+        
         curr_ticker_output=$(echo "$READ_INPUT" | awk -F ';' -v tic=$curr_ticker '{ if ($2==tic && $3=="sell") \
                      {sum+=$4*$6} if ($2==tic && $3=="buy") {sum-=$4*$6} } END {printf("%.2f", sum)}')
         save_output_unformatted
@@ -81,11 +93,10 @@ get_profit()
 }
 
 # Function saves list of values ​​of currently held positions into output_unformatted variable
-# in format : (ticker1_name;pos_of_ticker1'\n'ticker1_name;pos_of_ticker1'\n'...)
-# Length of longest variable string is saved into max_len
+# in format : (ticker1_name;pos_of_ticker1'\n'ticker2_name;pos_of_ticker2'\n'...)
 get_all_tickers_pos()
 {
-    # get all tickers if any ticker entered
+    # get all tickers if any ticker filter entered
     get_tickers
         
     tic_num=0
@@ -97,7 +108,11 @@ get_all_tickers_pos()
         curr_ticker=$(echo "$TICKERS" | awk -F '|' -v i=$tic_num '{print $i}')
             
         num_of_units=$(echo "$READ_INPUT" | awk -F ';' -v tic=$curr_ticker '{ if ($2==tic && $3=="buy") \
-                     {sum+=$6} if ($2==tic && $3=="sell") {sum-=$6} } END {printf("%.2f", sum)}')
+                     {sum+=$6} if ($2==tic && $3=="sell") {sum-=$6} } END {printf("%d", sum)}')
+        if [ "$num_of_units" -eq 0 ]; then
+            continue
+        fi
+
         last_price=$(echo "$READ_INPUT" | awk -F ';' -v tic=$curr_ticker -v last=0 '{if ($2==tic){last=$4}}\
                      END{print last}')
             
@@ -108,15 +123,17 @@ get_all_tickers_pos()
         len_of_res=${#res_for_curr_ticker}
         find_max_len
 
-        # adds record about currently processed ticker into output_unformatted
+        # adds info about currently processed ticker into output_unformatted
         curr_ticker_output="$curr_ticker;$res_for_curr_ticker"
         save_output_unformatted
     done
 }
 
+# Function saves the last price of each ticket into variable output_formatted
+# in format : (ticker1_name;last_price1'\n'ticker2_name;last_price2'\n'...)
 get_last_price()
 {
-    # get all tickers if any -t entered
+    # get all tickers if any ticker filter entered
     get_tickers
         
     tic_num=0
@@ -132,17 +149,17 @@ get_last_price()
         len_of_res=${#res_for_curr_ticker}
         find_max_len
 
-        # adds record about currently processed ticker into output_unformatted
+        # adds info about currently processed ticker into output_unformatted
         curr_ticker_output="$curr_ticker;$res_for_curr_ticker"
         save_output_unformatted
     done
 }
 
-# Function saves the number of transactions for tickers into variable output_unformatted
+# Function saves the number of transactions for each ticker into variable output_unformatted
 # in format (ticker1_name;num_of_transactions1'\n'ticker2_name;num_of_transactions2...)
 get_num_of_transactions()
 {
-    # get all tickers if any -t entered
+    # get all tickers if any ticker filter entered
     get_tickers
 
     tic_num=0
@@ -161,9 +178,9 @@ get_num_of_transactions()
     done
 }
 
+# Function saves input files into variable READ_INPUT
 store_input()
 {
-    ## nacteni vstupu do promenne READ_INPUT
     if ! [ -z "$GZ_LOG_FILES" ] && [ -z "$LOG_FILES" ]; then
         READ_INPUT=$(gzip -d -c $GZ_LOG_FILES)
     elif ! [ -z "$GZ_LOG_FILES" ]; then
@@ -174,14 +191,14 @@ store_input()
 }
 
 ## main --------------------------------------------------------------------------------------
-# store arguments
+# process arguments
 while [ "$#" -gt 0 ]; do
     case "$1" in
         list-tick | profit | pos | last-price | hist-ord | graph-pos)
             if [ -z $COMMAND ]; then
                 COMMAND="$1"
             else
-                echo "Bylo zadano vice prikazu." >&2; exit 1
+                echo "Povolen je pouze jeden příkaz." >&2; exit 1
             fi
             shift ;;
         --help | -h)
@@ -204,13 +221,13 @@ while [ "$#" -gt 0 ]; do
             if [ -z "$WIDTH" ]; then
                 WIDTH="$2"
             else
-                echo "Zadano vice prepinacu -w" >&2; exit 1
+                echo "Povolen je pouze jeden přepínač -w." >&2; exit 1
             fi
             shift; shift ;;
          *)
             # check file validity
             if ! [ -f $1 ]; then
-		        echo "Zadany soubor neexistuje." >&2; exit 1	
+		        echo "Zadaný soubor není validní." >&2; exit 1	
 	        fi
             # save file into variable
             if [ `echo $1 | grep "\.gz"` ]; then
@@ -269,7 +286,7 @@ case "$COMMAND" in
         ;;
     hist-ord)
         # output: histogram of the number of transactions according to the ticker
-        get_num_of_transactions # po provedeni mame v output_unformatted ulozeno: APPL;6'\n'GOOGL;7...
+        get_num_of_transactions
 
         if ! [ -z "$WIDTH" ]; then
             # find max length and find length of each line
@@ -277,14 +294,12 @@ case "$COMMAND" in
             output_unformatted=$(echo "$output_unformatted" | awk -F ';' -v m=$max -v w=$WIDTH 'BEGIN{one=m/w} \
                                 {$2=($2/one)-(0.49)} {printf("%s;%.0f\n", $1, $2)}')
         fi
-            OUTPUT=$(echo "$output_unformatted" | awk -F ';' '{num=$2; $2=""; for(i=0; i<num; i++){$2=$2"#"}; \
-                    if (num != 0) $2=" "$2;} {printf("%-9s :%-s\n", $1, $2)}')
+        OUTPUT=$(echo "$output_unformatted" | awk -F ';' '{num=$2; $2=""; for(i=0; i<num; i++){$2=$2"#"}; \
+                if (num != 0) $2=" "$2;} {printf("%-9s :%-s\n", $1, $2)}')
         ;;
     graph-pos)
         # output: graph of values ​​of held positions according to the ticker
-
-        # get numerical values of held positions for each ticker
-        get_all_tickers_pos
+        get_all_tickers_pos     # get numerical values of held positions for each ticker
 
         if [ -z "$WIDTH" ]; then    # one character = 1000
             output_unformatted=$(echo "$output_unformatted" | awk -F ';' '{ if ($2 > 0){$2=($2/1000)-(0.49)} \
