@@ -185,7 +185,7 @@ while [ "$#" -gt 0 ]; do
             fi
             shift ;;
         --help | -h)
-            print_help, exit 0 ;;
+            print_help; exit 0 ;;
         -a)
             DATETIME_AFTER="$2"
             shift; shift ;;
