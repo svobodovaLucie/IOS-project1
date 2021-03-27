@@ -29,9 +29,128 @@ DATETIME_BEFORE="9999-99-99 99:99:99"
 TICKERS=""
 WIDTH=""
 LOG_FILES=""
+TICKERS_COUNTER=0
+output_unformatted=""
 
-TICKERS_CNTR=0
+# Function saves an array of tickers into variable TICKERS (ticker1;ticker2...)
+# and a number of tickers into TICKERS_COUNTER
+get_tickers()
+{
+    if [ -z "$TICKERS" ]; then
+        list_of_tickers=$(echo "$READ_INPUT" | awk -F ';' '{print $2}' | sort | uniq)
+        TICKERS=$(echo "$list_of_tickers" | awk 'BEGIN{ORS="|"} {print $0}')
+        TICKERS_COUNTER=$(echo "$list_of_tickers" | awk 'END{print NR}')
+    fi
+}
 
+# Function saves max length of res_for_curr_ticker
+find_max_len()
+{
+    if [ "$len_of_res" -gt "$max_len" ]; then
+        max_len="$len_of_res"
+    fi
+}
+
+# Function saves info about surrently processed ticker into variable that stores info about all tickers
+save_output_unformatted()
+{
+    if [ -z "$output_unformatted" ]; then
+        output_unformatted="$curr_ticker_output"
+    else
+        output_unformatted="$output_unformatted\n$curr_ticker_output"
+    fi
+}
+
+# Function saves list of values ​​of currently held positions into output_unformatted variable
+# in format : (ticker1_name;pos_of_ticker1'\n'ticker1_name;pos_of_ticker1'\n'...)
+# Length of longest variable string is saved into max_len
+get_all_tickers_pos()
+{
+    # get all tickers if any ticker entered
+    get_tickers
+        
+    tic_num=0
+    max_len=0
+    output_unformatted=""
+    while [ "$tic_num" != "$TICKERS_COUNTER" ]
+    do
+        # loads currently proccesed ticker into curr_ticker
+        tic_num=$(($tic_num + 1))
+        curr_ticker=$(echo "$TICKERS" | awk -F '|' -v i=$tic_num '{print $i}')
+            
+        num_of_units=$(echo "$READ_INPUT" | awk -F ';' -v tic=$curr_ticker '{ if ($2 == tic && $3 == "buy") {sum+=$6} if ($2 == tic && $3 == "sell") {sum-=$6} } END {printf("%.2f", sum)}')
+        last_price=$(echo "$READ_INPUT" | awk -F ';' -v tic=$curr_ticker -v last=0 '{ if ($2 == tic){last=$4} } END{print last}')
+            
+        curr_ticker_info="$curr_ticker;$num_of_units;$last_price"
+        res_for_curr_ticker=$(echo "$curr_ticker_info" | awk -v units=$num_of_units -v price=$last_price -v res=0 '{res = units * price} END {printf("%05.2f", res)}')
+            
+        len_of_res=${#res_for_curr_ticker}
+        find_max_len
+
+        # adds record about currently processed ticker into output_unformatted
+        curr_ticker_output="$curr_ticker;$res_for_curr_ticker"
+        save_output_unformatted
+    done
+}
+
+get_last_price()
+{
+    # get all tickers if any -t entered
+    get_tickers
+        
+    tic_num=0
+    tmp_output=""
+    max_len=0
+    while [ "$tic_num" != "$TICKERS_COUNTER" ]
+    do
+        # loads currently proccesed ticker into curr_ticker
+        tic_num=$(($tic_num + 1))
+        curr_ticker=$(echo "$TICKERS" | awk -F '|' -v i=$tic_num '{print $i}')
+            
+        res_for_curr_ticker=$(echo "$READ_INPUT" | awk -F ';' -v curr_ticker=$curr_ticker -v tmp_last=0 '{ if ($2 == curr_ticker){tmp_last=$4} } END{print tmp_last}')
+        len_of_res=${#res_for_curr_ticker}
+        find_max_len
+
+        # adds record about currently processed ticker into output_unformatted
+        curr_ticker_output="$curr_ticker;$res_for_curr_ticker"
+        save_output_unformatted
+    done
+}
+
+get_hist_ord()
+{
+    # get all tickers if any -t entered
+    get_tickers
+
+    tic_num=0
+    max_len=0
+    transaction_counter=0
+    while [ "$tic_num" != "$TICKERS_COUNTER" ]
+    do
+        # loads currently proccesed ticker into curr_ticker
+        tic_num=$(($tic_num + 1))
+        curr_ticker=$(echo "$TICKERS" | awk -F '|' -v i=$tic_num '{print $i}')
+        transaction_counter=$(echo "$READ_INPUT" | awk -F ';' -v i=0 -v curr_ticker=$curr_ticker '{ if ($2 == curr_ticker){i+=1} }END {print i}')
+        
+        # find max length
+        if [ "$transaction_counter" -eq 0 ]; then
+            res_for_curr_ticker=""
+            len_of_res=0
+        else
+            res_for_curr_ticker=$(awk -v i=$transaction_counter 'BEGIN { OFS="#"; $i="#"; print }')
+            len_of_res=${#res_for_curr_ticker}
+        fi
+        find_max_len
+            
+        # save unformatted output
+        if [ -z "$res_for_curr_ticker" ]; then
+            curr_ticker_output="$curr_ticker;$res_for_curr_ticker"
+        else
+            curr_ticker_output="$curr_ticker; $res_for_curr_ticker"
+        fi
+        save_output_unformatted
+    done
+}
 # store arguments
 while [ "$#" -gt 0 ]; do
     case "$1" in
@@ -62,7 +181,7 @@ while [ "$#" -gt 0 ]; do
                 else 
                     TICKERS="$TICKERS|$2"
             fi
-            TICKERS_CNTR=$((TICKERS_CNTR+1))
+            TICKERS_COUNTER=$((TICKERS_COUNTER+1))
             shift; shift
             ;;
         -w)
@@ -102,7 +221,7 @@ READ_INPUT=$(echo "$READ_INPUT" | awk -F ';' -v date="$DATETIME_BEFORE" '$1 < da
 if ! [ -z "$TICKERS" ]; then
     curr_cnt=0
     filtered=""
-    while [ "$curr_cnt" != "$TICKERS_CNTR" ] ; do
+    while [ "$curr_cnt" != "$TICKERS_COUNTER" ] ; do
         curr_cnt=$(($curr_cnt + 1))
         curr_ticker=$(echo "$TICKERS" | awk -F '|' -v curr_cnt=$curr_cnt '{print $(curr_cnt)}')
         filtered=`echo "$READ_INPUT" | awk -F ';' -v curr_tick=$curr_ticker '\$2 == curr_tick {print \$0}'`
@@ -117,171 +236,32 @@ fi
 
 case "$COMMAND" in
     list-tick)
+        # output: a list of stock exchange symbols, so-called "ticks"
         OUTPUT=$(echo "$READ_INPUT" | awk -F ';' '{print $2}' | sort | uniq)
         ;;
-    profit)     # suma hodnot sell - suma hodnot buy
+    profit)
+        # output: statement of total profit from closed positions
         OUTPUT=`echo "$READ_INPUT" | awk -F ';' -v profit=$OUTPUT '{ if ($3 == "sell") { tmp_sum+=$4*$6 } else{tmp_sum-=$4*$6} } END {printf("%.2f", tmp_sum + profit)}'` 
         ;;
-    pos)        # výpis hodnot aktuálně držených pozic seřazených sestupně dle hodnoty
-                # DATUM A CAS;TICKER;TYP TRANSAKCE;JEDNOTKOVA CENA;MENA;OBJEM;ID
-                # pos = (součet OBJEMŮ buy - součet OBJEMŮ sell) * jednotková cena za poslední transakci
-        
-        # get all tickers if any ticker entered
-        if [ -z "$TICKERS" ]; then
-            all_tickers_oddelene_n=$(echo "$READ_INPUT" | awk -F ';' '{print $2}' | sort | uniq)
-            TICKERS=$(echo "$all_tickers_oddelene_n" | awk 'BEGIN{ORS="|"} {print $0}')
-            TICKERS_CNTR=$(echo "$all_tickers_oddelene_n" | awk 'END{print NR}')
-        fi
-        
-        tic_num=0
-        tmp_output=""
-        max_len=0
-        while [ "$tic_num" != "$TICKERS_CNTR" ]
-        do
-            tic_num=$(($tic_num + 1))
-            act_ticker=$(echo "$TICKERS" | awk -F '|' -v i=$tic_num '{print $i}')
-            
-            pocet_drzenych_jednotek=$(echo "$READ_INPUT" | awk -F ';' -v act_ticker=$act_ticker '{ if ($2 == act_ticker && $3 == "buy") {tmp_sum+=$6} if ($2 == act_ticker && $3 == "sell") {tmp_sum-=$6} } END {printf("%.2f", tmp_sum)}')
-            jednotkova_cena_z_posledni_transakce=$(echo "$READ_INPUT" | awk -F ';' -v act_ticker=$act_ticker -v tmp_last=0 '{ if ($2 == act_ticker){tmp_last=$4} } END{print tmp_last}')
-            
-            filter_pos="$act_ticker;$pocet_drzenych_jednotek;$jednotkova_cena_z_posledni_transakce"
-            result_pro_act_ticker=$(echo "$filter_pos" | awk -v pdj=$pocet_drzenych_jednotek -v jczpt=$jednotkova_cena_z_posledni_transakce -v res=0 '{res = pdj * jczpt} END {printf("%05.2f", res)}')
-            
-            len_of_result_pro_act_ticker=${#result_pro_act_ticker}
-            
-            # nalezeni nejdelsiho retezce
-            if [ "$len_of_result_pro_act_ticker" -gt "$max_len" ]; then
-                max_len="$len_of_result_pro_act_ticker"
-            fi
-
-            vypis="$act_ticker;$result_pro_act_ticker"
-            if [ -z "$tmp_output" ]; then
-                tmp_output="$vypis"
-            else
-                tmp_output="$tmp_output\n$vypis"
-            fi
-        done
-        tmp2_output=$(echo "$tmp_output" | awk -F ';' -v max_len=$max_len '{printf("%-9s :%*.2f\n", $1, max_len+1, $2)}')
-        OUTPUT=$(echo "$tmp2_output" |  sort -t ':' -h -r  -k 2)
+    pos)
+        # output: list of values ​​of currently held positions sorted in descending order by value
+        get_all_tickers_pos
+        OUTPUT=$(echo "$output_unformatted" | awk -F ';' -v max_len=$max_len '{printf("%-9s :%*.2f\n", $1, max_len+1, $2)}' |  sort -t ':' -h -r  -k 2)
         ;;
-    last-price)
-        # get all tickers if any -t entered
-        if [ -z "$TICKERS" ]; then
-            all_tickers_oddelene_n=$(echo "$READ_INPUT" | awk -F ';' '{print $2}' | sort | uniq)
-            TICKERS=$(echo "$all_tickers_oddelene_n" | awk 'BEGIN{ORS="|"} {print $0}')
-            TICKERS_CNTR=$(echo "$all_tickers_oddelene_n" | awk 'END{print NR}')
-        fi
-        
-        tic_num=0
-        tmp_output=""
-        max_len=0
-        while [ "$tic_num" != "$TICKERS_CNTR" ]
-        do
-            tic_num=$(($tic_num + 1))
-            act_ticker=$(echo "$TICKERS" | awk -F '|' -v i=$tic_num '{print $i}')
-            
-            jednotkova_cena_z_posledni_transakce=$(echo "$READ_INPUT" | awk -F ';' -v act_ticker=$act_ticker -v tmp_last=0 '{ if ($2 == act_ticker){tmp_last=$4} } END{print tmp_last}')
-            len_of_result_pro_act_ticker=${#jednotkova_cena_z_posledni_transakce}
-            
-            # nalezeni nejdelsiho retezce
-            if [ "$len_of_result_pro_act_ticker" -gt "$max_len" ]; then
-                max_len="$len_of_result_pro_act_ticker"
-            fi
 
-            vypis="$act_ticker;$jednotkova_cena_z_posledni_transakce"
-            if [ -z "$tmp_output" ]; then
-                tmp_output="$vypis"
-            else
-                tmp_output="$tmp_output\n$vypis"
-            fi
-        done
-        tmp2_output=$(echo "$tmp_output" | awk -F ';' -v max_len=$max_len '{printf("%-9s :%*.2f\n", $1, max_len+1, $2)}')
-        OUTPUT=$(echo "$tmp2_output" |  sort -t ':' -k1)
+    last-price)
+        # output: list of the last known price for each ticker
+        get_last_price
+        OUTPUT=$(echo "$output_unformatted" | awk -F ';' -v max_len=$max_len '{printf("%-9s :%*.2f\n", $1, max_len+1, $2)}' |  sort -t ':' -k1)
         ;;
     hist-ord)
-        # get all tickers if any -t entered
-        if [ -z "$TICKERS" ]; then
-            all_tickers_oddelene_n=$(echo "$READ_INPUT" | awk -F ';' '{print $2}' | sort | uniq)
-            TICKERS=$(echo "$all_tickers_oddelene_n" | awk 'BEGIN{ORS="|"} {print $0}')
-            TICKERS_CNTR=$(echo "$all_tickers_oddelene_n" | awk 'END{print NR}')
-        fi
-
-        tic_num=0
-        tmp_output=""
-        tmp2_output=""
-        max_len=0
-        transakce_cntr=0
-        while [ "$tic_num" != "$TICKERS_CNTR" ]
-        do
-            transakce_cntr=0
-            tic_num=$(($tic_num + 1))
-            act_ticker=$(echo "$TICKERS" | awk -F '|' -v i=$tic_num '{print $i}')
-            transakce_cntr=$(echo "$READ_INPUT" | awk -F ';' -v i=0 -v act_ticker=$act_ticker '{ if ($2 == act_ticker){i+=1} }END {print i}')
-            
-            if [ "$transakce_cntr" -eq 0 ]; then
-                vystup_pro_act_tic=""
-                len_of_result_pro_act_ticker=0
-            else
-                vystup_pro_act_tic=$(awk -v i=$transakce_cntr 'BEGIN { OFS="#"; $i="#"; print }')
-                len_of_result_pro_act_ticker=${#vystup_pro_act_tic}
-            fi
-
-            # nalezeni nejdelsiho retezce
-            if [ "$len_of_result_pro_act_ticker" -gt "$max_len" ]; then
-                max_len="$len_of_result_pro_act_ticker"
-            fi
-            
-            if [ -z "$vystup_pro_act_tic" ]; then
-                vypis="$act_ticker;$vystup_pro_act_tic"
-            else
-                vypis="$act_ticker; $vystup_pro_act_tic"
-            fi   
-
-            if [ -z "$tmp_output" ]; then
-                tmp_output="$vypis"
-            else
-                tmp_output="$tmp_output\n$vypis"
-            fi
-        done
-        tmp2_output=$(echo "$tmp_output" | awk -F ';' -v max_len=$max_len '{printf("%-9s :%-s\n", $1, $2)}')
-        OUTPUT=$(echo "$tmp2_output" |  sort -t ':' -k1)
+        # output: histogram of the number of transactions according to the ticker
+        get_hist_ord
+        OUTPUT=$(echo "$output_unformatted" | awk -F ';' -v max_len=$max_len '{printf("%-9s :%-s\n", $1, $2)}' | sort -t ':' -k1)
         ;;
     graph-pos)
-        # get all tickers if any ticker entered
-        if [ -z "$TICKERS" ]; then
-            all_tickers_oddelene_n=$(echo "$READ_INPUT" | awk -F ';' '{print $2}' | sort | uniq)
-            TICKERS=$(echo "$all_tickers_oddelene_n" | awk 'BEGIN{ORS="|"} {print $0}')
-            TICKERS_CNTR=$(echo "$all_tickers_oddelene_n" | awk 'END{print NR}')
-        fi
-        
-        tic_num=0
-        tmp_output=""
-        max_len=0
-        while [ "$tic_num" != "$TICKERS_CNTR" ]
-        do
-            tic_num=$(($tic_num + 1))
-            act_ticker=$(echo "$TICKERS" | awk -F '|' -v i=$tic_num '{print $i}')
-            
-            pocet_drzenych_jednotek=$(echo "$READ_INPUT" | awk -F ';' -v act_ticker=$act_ticker '{ if ($2 == act_ticker && $3 == "buy") {tmp_sum+=$6} if ($2 == act_ticker && $3 == "sell") {tmp_sum-=$6} } END {printf("%.2f", tmp_sum)}')
-            jednotkova_cena_z_posledni_transakce=$(echo "$READ_INPUT" | awk -F ';' -v act_ticker=$act_ticker -v tmp_last=0 '{ if ($2 == act_ticker){tmp_last=$4} } END{print tmp_last}')
-            
-            filter_pos="$act_ticker;$pocet_drzenych_jednotek;$jednotkova_cena_z_posledni_transakce"
-            result_pro_act_ticker=$(echo "$filter_pos" | awk -v pdj=$pocet_drzenych_jednotek -v jczpt=$jednotkova_cena_z_posledni_transakce -v res=0 '{res = pdj * jczpt} END {printf("%05.2f", res)}')
-            
-            len_of_result_pro_act_ticker=${#result_pro_act_ticker}
-            
-            # nalezeni nejdelsiho retezce
-            if [ "$len_of_result_pro_act_ticker" -gt "$max_len" ]; then
-                max_len="$len_of_result_pro_act_ticker"
-            fi
-
-            vypis="$act_ticker;$result_pro_act_ticker"
-            if [ -z "$tmp_output" ]; then
-                tmp_output="$vypis"
-            else
-                tmp_output="$tmp_output\n$vypis"
-            fi
-        done
+        # output: graph of values ​​of held positions according to the ticker
+        get_all_tickers_pos
 
             # width prevod
             if [ -z "$WIDTH" ]; then
@@ -289,12 +269,12 @@ case "$COMMAND" in
             fi
             
             # hodnota jednoho dilku je:
-            jeden_dilek=$(echo "$tmp_output" | awk -F ';' -v max=0 -v width=$WIDTH 'function abs(n) {return n < 0 ? -n : n} { if (abs($2) > max) {max = abs($2)} } END{printf("%05.22f", (max/width))}')
+            jeden_dilek=$(echo "$output_unformatted" | awk -F ';' -v max=0 -v width=$WIDTH 'function abs(n) {return n < 0 ? -n : n} { if (abs($2) > max) {max = abs($2)} } END{printf("%05.22f", (max/width))}')
             
             #vypocitat, kolik dilku ma byt (hodnota_pro_ticker / jeden_dilek), 
             # pokud zaporna, tak zaokrouhlit nahoru + dat vykricniky
             # pokud kladna, tak zaokrouhlid dolu + dat hashtags
-            tmp2_output=$(echo "$tmp_output" | awk -F ';' -v res=0 -v dilek=$jeden_dilek '{
+            tmp2_output=$(echo "$output_unformatted" | awk -F ';' -v res=0 -v dilek=$jeden_dilek '{
                 {res=$2/dilek; 
                 if (res < 0) {
                     res=res+0.5;
@@ -329,4 +309,3 @@ case "$COMMAND" in
 esac
 
 echo "$OUTPUT"
-
