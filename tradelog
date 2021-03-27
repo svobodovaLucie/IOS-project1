@@ -159,14 +159,6 @@ get_hist_ord()
 
 store_input()
 {
-    # check for valid files
-	if ! [ -f ${LOG_FILES} ]; then
-		echo "Zadany soubor neexistuje." >&2; exit 1	
-	fi
-	if ! [ -f ${GZ_LOG_FILES} ]; then 
-		echo "Zadany soubor neexistuje." >&2; exit 1	
-	fi
-
     ## nacteni vstupu do promenne READ_INPUT
     if ! [ -z "$GZ_LOG_FILES" ] && [ -z "$LOG_FILES" ]; then
         READ_INPUT=$(gzip -d -c $GZ_LOG_FILES)
@@ -218,6 +210,11 @@ while [ "$#" -gt 0 ]; do
             shift; shift
             ;;
          *)
+            # check file validity
+            if ! [ -f $1 ]; then
+		        echo "Zadany soubor neexistuje." >&2; exit 1	
+	        fi
+            # save file into variable
             if [ `echo $1 | grep "\.gz"` ]; then
                 GZ_LOG_FILES="$GZ_LOG_FILES $1"
             else 
@@ -289,7 +286,7 @@ case "$COMMAND" in
         if [ -z "$WIDTH" ]; then
             WIDTH=1000
         fi
-            
+
         # hodnota jednoho dilku je:
         jeden_dilek=$(echo "$output_unformatted" | awk -F ';' -v max=0 -v w=$WIDTH 'function abs(n){return n<0 ? -n : n}\
                     { if (abs($2) > max) {max = abs($2)} } END{printf("%05.22f", (max/w))}')
