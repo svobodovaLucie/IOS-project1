@@ -68,8 +68,6 @@ get_profit()
     get_tickers
         
     tic_num=0
-    profit=0
-    output_unformatted=""
     while [ "$tic_num" != "$TICKERS_COUNTER" ]
     do
         # loads currently proccesed ticker into curr_ticker
@@ -80,7 +78,6 @@ get_profit()
                      {sum+=$4*$6} if ($2==tic && $3=="buy") {sum-=$4*$6} } END {printf("%.2f", sum)}')
         save_output_unformatted
     done
-
 }
 
 # Function saves list of values ​​of currently held positions into output_unformatted variable
@@ -93,7 +90,6 @@ get_all_tickers_pos()
         
     tic_num=0
     max_len=0
-    output_unformatted=""
     while [ "$tic_num" != "$TICKERS_COUNTER" ]
     do
         # loads currently proccesed ticker into curr_ticker
@@ -124,7 +120,6 @@ get_last_price()
     get_tickers
         
     tic_num=0
-    tmp_output=""
     max_len=0
     while [ "$tic_num" != "$TICKERS_COUNTER" ]
     do
@@ -143,7 +138,9 @@ get_last_price()
     done
 }
 
-get_hist_ord()
+# Function saves the number of transactions for tickers into variable output_unformatted
+# in format (ticker1_name;num_of_transactions1'\n'ticker2_name;num_of_transactions2...)
+get_num_of_transactions()
 {
     # get all tickers if any -t entered
     get_tickers
@@ -158,23 +155,8 @@ get_hist_ord()
         curr_ticker=$(echo "$TICKERS" | awk -F '|' -v i=$tic_num '{print $i}')
         transaction_counter=$(echo "$READ_INPUT" | awk -F ';' -v i=0 -v tic=$curr_ticker \
                             '{ if ($2 == tic){i+=1} }END {print i}')
-        
-        # find max length
-        if [ "$transaction_counter" -eq 0 ]; then
-            res_for_curr_ticker=""
-            len_of_res=0
-        else
-            res_for_curr_ticker=$(awk -v i=$transaction_counter 'BEGIN { OFS="#"; $i="#"; print }')
-            len_of_res=${#res_for_curr_ticker}
-        fi
-        find_max_len
-            
         # save unformatted output
-        if [ -z "$res_for_curr_ticker" ]; then
-            curr_ticker_output="$curr_ticker;$res_for_curr_ticker"
-        else
-            curr_ticker_output="$curr_ticker; $res_for_curr_ticker"
-        fi
+        curr_ticker_output="$curr_ticker;$transaction_counter"
         save_output_unformatted
     done
 }
@@ -201,19 +183,15 @@ while [ "$#" -gt 0 ]; do
             else
                 echo "Bylo zadano vice prikazu." >&2; exit 1
             fi
-            shift
-            ;;
+            shift ;;
         --help | -h)
-            print_help, exit 0
-            ;;
+            print_help, exit 0 ;;
         -a)
             DATETIME_AFTER="$2"
-            shift; shift
-            ;;
+            shift; shift ;;
         -b)
             DATETIME_BEFORE="$2"
-            shift; shift
-            ;;
+            shift; shift ;;
         -t)
             if [ -z "$TICKERS" ]; then
                 TICKERS="$2"
@@ -221,16 +199,14 @@ while [ "$#" -gt 0 ]; do
                 TICKERS="$TICKERS|$2"
             fi
             TICKERS_COUNTER=$((TICKERS_COUNTER+1))
-            shift; shift
-            ;;
+            shift; shift ;;
         -w)
             if [ -z "$WIDTH" ]; then
                 WIDTH="$2"
             else
                 echo "Zadano vice prepinacu -w" >&2; exit 1
             fi
-            shift; shift
-            ;;
+            shift; shift ;;
          *)
             # check file validity
             if ! [ -f $1 ]; then
@@ -242,18 +218,17 @@ while [ "$#" -gt 0 ]; do
             else 
                 LOG_FILES="$LOG_FILES $1"
             fi
-            shift
-            ;;
+            shift ;;
     esac
 done
 
 store_input
 
-# datetime
+# datetime filter
 READ_INPUT=$(echo "$READ_INPUT" | awk -F ';' -v date="$DATETIME_AFTER" '$1 > date {print $0}')
 READ_INPUT=$(echo "$READ_INPUT" | awk -F ';' -v date="$DATETIME_BEFORE" '$1 < date {print $0}')
 
-# tickers
+# tickers filter
 if ! [ -z "$TICKERS" ]; then
     curr_cnt=0
     filtered=""
@@ -294,9 +269,16 @@ case "$COMMAND" in
         ;;
     hist-ord)
         # output: histogram of the number of transactions according to the ticker
-        get_hist_ord
-        OUTPUT=$(echo "$output_unformatted" | awk -F ';' '{printf("%-9s :%-s\n", $1, $2)}' \
-                | sort -t ':' -k1)
+        get_num_of_transactions # po provedeni mame v output_unformatted ulozeno: APPL;6'\n'GOOGL;7...
+
+        if ! [ -z "$WIDTH" ]; then
+            # find max length and find length of each line
+            max=$(echo "$output_unformatted" | awk -F ';' 'BEGIN{max=0} {if($2 > max) max=$2} END{print max}')
+            output_unformatted=$(echo "$output_unformatted" | awk -F ';' -v m=$max -v w=$WIDTH 'BEGIN{one=m/w} \
+                                {$2=($2/one)-(0.49)} {printf("%s;%.0f\n", $1, $2)}')
+        fi
+            OUTPUT=$(echo "$output_unformatted" | awk -F ';' '{num=$2; $2=""; for(i=0; i<num; i++){$2=$2"#"}; \
+                    if (num != 0) $2=" "$2;} {printf("%-9s :%-s\n", $1, $2)}')
         ;;
     graph-pos)
         # output: graph of values ​​of held positions according to the ticker
