@@ -219,9 +219,17 @@ while [ "$#" -gt 0 ]; do
             shift; shift ;;
         -w)
             if [ -z "$WIDTH" ]; then
-                WIDTH="$2"
+                number_check=$(echo "$2" | awk '$0 ~/[+]?[^0-9]/ { printf("%d", 0)}')
+                if [ "$number_check" != "0" ]; then
+                    WIDTH="$2"
+                else
+                    echo "Filtr width musí být kladné celé číslo." >&2; exit 1
+                fi
             else
                 echo "Povolen je pouze jeden přepínač -w." >&2; exit 1
+            fi
+            if [ -z "$2" ]; then
+                echo "Nebyla zadána hodnota WIDTH za přepínačem -w" >&2; exit 1
             fi
             shift; shift ;;
          *)
@@ -319,3 +327,4 @@ case "$COMMAND" in
 esac
 
 echo "$OUTPUT"
+exit 0
