@@ -107,7 +107,7 @@ get_all_tickers_pos()
         tic_num=$((tic_num + 1))
         curr_ticker=$(echo "$TICKERS" | awk -F '|' -v i=$tic_num '{print $i}')
             
-        num_of_units=$(echo "$READ_INPUT" | awk -F ';' -v tic=$curr_ticker '{ if ($2==tic && $3=="buy")
+        num_of_units=$(echo "$READ_INPUT" | awk -F ';' -v tic="$curr_ticker" '{ if ($2==tic && $3=="buy")
                      {sum+=$6} if ($2==tic && $3=="sell") {sum-=$6} } END {printf("%d", sum)}')
         if [ "$num_of_units" -eq 0 ]; then
             continue
@@ -117,7 +117,7 @@ get_all_tickers_pos()
                      END{print last}')
             
         curr_ticker_info="$curr_ticker;$num_of_units;$last_price"
-        res_for_curr_ticker=$(echo "$curr_ticker_info" | awk -v units="$num_of_units" -v price=$last_price '
+        res_for_curr_ticker=$(echo "$curr_ticker_info" | awk -v units="$num_of_units" -v price="$last_price" '
                             {res = units * price} END {printf("%05.2f", res)}')
             
         len_of_res=${#res_for_curr_ticker}
@@ -260,7 +260,7 @@ if ! [ -z "$TICKERS" ]; then
     while [ "$curr_cnt" != "$TICKERS_COUNTER" ] ; do
         curr_cnt=$((curr_cnt + 1))
         curr_ticker=$(echo "$TICKERS" | awk -F '|' -v count=$curr_cnt '{print $(count)}')
-        filtered=$(echo "$READ_INPUT" | awk -F ';' -v tic=$curr_ticker '$2 == tic {print $0}')
+        filtered=$(echo "$READ_INPUT" | awk -F ';' -v tic="$curr_ticker" '$2 == tic {print $0}')
         if [ -z "$OUTPUT" ]; then
             OUTPUT="$filtered"
         else
