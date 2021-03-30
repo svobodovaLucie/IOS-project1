@@ -204,11 +204,27 @@ while [ "$#" -gt 0 ]; do
         --help | -h)
             print_help; exit 0 ;;
         -a)
-            DATETIME_AFTER="$2"
-            shift; shift ;;
+            # format check
+            case "$2" in
+                ([0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]\ [0-9][0-9]:[0-9][0-9]:[0-9][0-9])
+                    if [ "$2" \> "$DATETIME_AFTER" ]; then      # intersection of more than one -a
+                        DATETIME_AFTER="$2"
+                    fi
+                    shift; shift;;
+                *)
+                    echo "DATETIME musí být ve formátu YYYY-MM-DD HH:MM:SS" >&2; exit 1
+            esac;;
         -b)
-            DATETIME_BEFORE="$2"
-            shift; shift ;;
+            # format check
+            case "$2" in
+                ([0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]\ [0-9][0-9]:[0-9][0-9]:[0-9][0-9])
+                    if [ "$2" \< "$DATETIME_BEFORE" ]; then     # intersection of more than one -b
+                        DATETIME_BEFORE="$2"
+                    fi
+                    shift; shift;;
+                *)
+                    echo "DATETIME musí být ve formátu YYYY-MM-DD HH:MM:SS" >&2; exit 1
+            esac;;
         -t)
             if [ -z "$TICKERS" ]; then
                 TICKERS="$2"
